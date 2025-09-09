@@ -16,6 +16,7 @@ import { ref, uploadBytesResumable, getDownloadURL, UploadTask } from "firebase/
 import { Progress } from "../ui/progress";
 
 interface ChatInputProps {
+  chatId: string;
   onSendMessage: (data: { text?: string; attachmentUrl?: string; attachmentType?: string, attachmentName?: string }) => void;
   smartReplies: string[];
   isLoadingSmartReplies: boolean;
@@ -23,12 +24,11 @@ interface ChatInputProps {
 
 const emojis = ["😀", "😂", "😍", "🤔", "👍", "🎉", "❤️", "🙏"];
 
-// Helper function to resize images before upload
 const compressImage = (file: File, maxWidth: number = 1280): Promise<Blob> => {
   return new Promise((resolve, reject) => {
     const isImage = file.type.startsWith('image/');
     if (!isImage) {
-      resolve(file); // Not an image, return original file
+      resolve(file);
       return;
     }
 
@@ -58,14 +58,13 @@ const compressImage = (file: File, maxWidth: number = 1280): Promise<Blob> => {
       }
       ctx.drawImage(img, 0, 0, width, height);
       
-      // Get blob from canvas
       canvas.toBlob((blob) => {
         if (blob) {
           resolve(blob);
         } else {
           reject(new Error('Canvas to Blob conversion failed'));
         }
-      }, file.type, 0.9); // 0.9 is image quality
+      }, file.type, 0.9);
     };
 
     img.onerror = reject;
@@ -74,7 +73,7 @@ const compressImage = (file: File, maxWidth: number = 1280): Promise<Blob> => {
 };
 
 
-export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }: ChatInputProps) {
+export function ChatInput({ chatId, onSendMessage, smartReplies, isLoadingSmartReplies }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -283,13 +282,6 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
       }
     };
   }, []);
-
-  const [chatId, setChatId] = useState('');
-    useEffect(() => {
-        if (window.location.pathname.includes('/chat/')) {
-            setChatId(window.location.pathname.split('/chat/')[1]);
-        }
-    }, []);
 
   return (
     <div className="border-t bg-card p-2 md:p-4 space-y-2">
