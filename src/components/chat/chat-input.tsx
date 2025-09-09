@@ -125,16 +125,17 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
         return;
       }
       
+      const isImage = file.type.startsWith('image/');
       const toastId = toast({
         title: "Preparing upload...",
-        description: `Compressing ${file.name}...`,
+        description: isImage ? `Compressing ${file.name}...` : `Preparing ${file.name}...`,
       }).id;
 
       setUploadingFile(file);
       setUploadProgress(0);
 
       try {
-        const fileToUpload = await compressImage(file);
+        const fileToUpload = isImage ? await compressImage(file) : file;
         const storageRef = ref(storage, `chat-attachments/${chatId}/${Date.now()}_${file.name}`);
         const newUploadTask = uploadBytesResumable(storageRef, fileToUpload);
         setUploadTask(newUploadTask);
@@ -151,12 +152,14 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
           },
           (error) => {
             console.error("Upload failed:", error);
-            toast({
-              id: toastId,
-              title: "Upload Failed",
-              description: "Your file could not be uploaded. Please try again.",
-              variant: "destructive"
-            });
+            if (error.code !== 'storage/canceled') {
+              toast({
+                id: toastId,
+                title: "Upload Failed",
+                description: "Your file could not be uploaded. Please try again.",
+                variant: "destructive"
+              });
+            }
             setUploadingFile(null);
             setUploadTask(null);
           },
@@ -204,7 +207,7 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
         toast({
             title: "Upload Cancelled",
             description: `Upload of ${uploadingFile?.name} was cancelled.`,
-            variant: "destructive"
+            variant: "default"
         });
     }
     setUploadingFile(null);
@@ -323,6 +326,7 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
           ref={fileInputRef} 
           onChange={handleFileChange} 
           className="hidden" 
+          accept="image/*,video/*"
           disabled={isRecording || !!uploadingFile}
         />
         

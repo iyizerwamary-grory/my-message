@@ -16,13 +16,14 @@ interface ChatMessageItemProps {
 }
 
 const isImage = (type?: string) => type?.startsWith('image/');
+const isVideo = (type?: string) => type?.startsWith('video/');
 
 const AttachmentPreview = ({ message }: { message: Message }) => {
     if (!message.attachmentUrl) return null;
 
     if (isImage(message.attachmentType)) {
         return (
-            <div className="relative mt-2 h-48 w-48 cursor-pointer overflow-hidden rounded-lg border">
+            <div className="relative mt-2 h-48 w-64 max-w-full cursor-pointer overflow-hidden rounded-lg border">
                 <Image
                     src={message.attachmentUrl}
                     alt={message.attachmentName || "Uploaded image"}
@@ -33,10 +34,22 @@ const AttachmentPreview = ({ message }: { message: Message }) => {
             </div>
         );
     }
+    
+    if (isVideo(message.attachmentType)) {
+        return (
+            <div className="relative mt-2 w-64 max-w-full overflow-hidden rounded-lg border">
+                <video
+                    src={message.attachmentUrl}
+                    controls
+                    className="w-full"
+                />
+            </div>
+        )
+    }
 
     // Fallback for other file types
     return (
-        <div className="mt-2 flex items-center rounded-lg border bg-muted/50 p-2">
+        <div className="mt-2 flex items-center rounded-lg border bg-muted/50 p-2 max-w-xs">
             <File className="h-7 w-7 text-muted-foreground mr-2 shrink-0" />
             <div className="flex-1 overflow-hidden">
                 <p className="truncate text-sm font-medium">{message.attachmentName || "Attachment"}</p>
@@ -81,16 +94,18 @@ export function ChatMessageItem({ message, currentUser }: ChatMessageItemProps) 
             <TooltipTrigger asChild>
               <div
                 className={cn(
-                  "max-w-[70%] rounded-xl px-3.5 py-2.5 shadow-md relative",
+                  "max-w-[70%] rounded-xl px-3 py-2 shadow-md relative",
                   isOwnMessage
                     ? "bg-primary text-primary-foreground rounded-br-none"
-                    : "bg-card text-card-foreground border rounded-bl-none"
+                    : "bg-card text-card-foreground border rounded-bl-none",
+                  // No padding if the message is only an attachment with no text
+                  message.attachmentUrl && !message.text && 'p-1'
                 )}
               >
                 {!isOwnMessage && (
-                  <p className="text-xs font-medium mb-0.5 text-muted-foreground">{senderName}</p>
+                   <p className={cn("text-xs font-medium mb-0.5 text-muted-foreground", message.attachmentUrl && !message.text && 'px-2 pt-1' )}>{senderName}</p>
                 )}
-                {message.text && <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>}
+                {message.text && <p className="text-sm whitespace-pre-wrap break-words px-0.5">{message.text}</p>}
                 {message.attachmentUrl && <AttachmentPreview message={message} />}
               </div>
             </TooltipTrigger>
