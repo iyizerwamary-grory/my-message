@@ -20,12 +20,13 @@ import {
   serverTimestamp,
   doc,
   getDoc,
-  Timestamp
+  Timestamp,
+  limit,
+  getDocs
 } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Info } from 'lucide-react';
-// Smart replies are disabled for now due to data structure changes
-// import { generateSmartReplies } from '@/ai/flows/smart-replies';
+import { generateSmartReplies } from '@/ai/flows/smart-replies';
 
 export default function ChatConversationPage() {
   const params = useParams();
@@ -36,10 +37,22 @@ export default function ChatConversationPage() {
   const [messages, setMessages] = useState<AppMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
   const [chatName, setChatName] = useState(chatId); // Default to chatId, can be fetched
-  // const [smartReplies, setSmartReplies] = useState<string[]>([]);
-  // const [isLoadingSmartReplies, setIsLoadingSmartReplies] = useState(false);
+  const [smartReplies, setSmartReplies] = useState<string[]>([]);
+  const [isLoadingSmartReplies, setIsLoadingSmartReplies] = useState(false);
+  const [participants, setParticipants] = useState<AppUser[]>([]);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+        if (scrollAreaRef.current) {
+          const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
+          if (viewport) {
+            viewport.scrollTop = viewport.scrollHeight;
+          }
+        }
+      }, 100);
+  }
 
   useEffect(() => {
     if (authLoading) return; // Wait for auth to resolve
@@ -64,27 +77,33 @@ export default function ChatConversationPage() {
     }
 
 
-    // Fetch chat details (like name) if needed - for now, simple name
+    // Fetch chat details (like name and participants)
     const fetchChatDetails = async () => {
-      // For 1-on-1 chats, the name should be the other user's name
-      if (currentUser && chatId.includes('_')) {
+      if (!currentUser) return;
+      
+      const isGroupChat = !chatId.includes('_');
+
+      if (isGroupChat) {
+         const chatDocRef = doc(db, 'chats', chatId);
+         const chatDocSnap = await getDoc(chatDocRef);
+         if (chatDocSnap.exists() && chatDocSnap.data().name) {
+           setChatName(chatDocSnap.data().name);
+           // Fetch participants for group chat if needed (not implemented yet)
+           setParticipants([]); // Placeholder
+         } else {
+           setChatName(chatId.charAt(0).toUpperCase() + chatId.slice(1)); // Default name from ID
+         }
+      } else {
         const otherUserId = chatId.split('_').filter(id => id !== currentUser.uid)[0];
         if (otherUserId) {
           const userDocRef = doc(db, 'users', otherUserId);
           const userDocSnap = await getDoc(userDocRef);
           if (userDocSnap.exists()) {
-            setChatName(userDocSnap.data().displayName || 'Chat User');
+            const otherUserData = userDocSnap.data() as AppUser;
+            setChatName(otherUserData.displayName || 'Chat User');
+            setParticipants([currentUser, otherUserData]);
           }
-          return;
         }
-      }
-      
-      const chatDocRef = doc(db, 'chats', chatId);
-      const chatDocSnap = await getDoc(chatDocRef);
-      if (chatDocSnap.exists() && chatDocSnap.data().name) {
-        setChatName(chatDocSnap.data().name);
-      } else {
-        setChatName(chatId.charAt(0).toUpperCase() + chatId.slice(1)); // Default name from ID
       }
     };
     fetchChatDetails();
@@ -103,6 +122,7 @@ export default function ChatConversationPage() {
           chatId: chatId,
           senderId: data.senderId,
           senderName: data.senderName,
+          senderPhotoURL: data.senderPhotoURL,
           text: data.text,
           timestamp: (data.timestamp as Timestamp)?.toDate().getTime() || Date.now(),
           attachmentUrl: data.attachmentUrl,
@@ -113,15 +133,7 @@ export default function ChatConversationPage() {
       setMessages(fetchedMessages);
       setIsLoadingMessages(false);
       
-      // Scroll to bottom after messages load or update
-      setTimeout(() => {
-        if (scrollAreaRef.current) {
-          const viewport = scrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
-          if (viewport) {
-            viewport.scrollTop = viewport.scrollHeight;
-          }
-        }
-      }, 100);
+      scrollToBottom();
     }, (error) => {
       console.error("Error fetching messages:", error);
       setIsLoadingMessages(false);
@@ -131,16 +143,44 @@ export default function ChatConversationPage() {
 
   }, [chatId, currentUser, authLoading, router]);
 
-  // Smart replies disabled for now
-  // useEffect(() => {
-  //   if (messages.length > 0 && currentUser) {
-  //     // fetchSmartReplies();
-  //   }
-  // }, [messages, currentUser]);
+  const fetchSmartReplies = async () => {
+    if (isLoadingSmartReplies || messages.length < 1) return;
+
+    setIsLoadingSmartReplies(true);
+    try {
+      const lastMessages = messages.slice(-5).map(m => ({
+          sender: m.senderId === currentUser?.uid ? 'user' : 'other',
+          text: m.text
+      }));
+
+      const response = await generateSmartReplies({ messages: lastMessages });
+      if (response && response.suggestions) {
+        setSmartReplies(response.suggestions);
+      }
+    } catch (error) {
+      console.error("Error generating smart replies:", error);
+      setSmartReplies([]); // Clear on error
+    } finally {
+      setIsLoadingSmartReplies(false);
+    }
+  };
+
+  useEffect(() => {
+    if (messages.length > 0 && currentUser) {
+      // Small delay to prevent fetching on every single message update in rapid succession
+      const timer = setTimeout(() => {
+         fetchSmartReplies();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [messages, currentUser]);
 
   const handleSendMessage = async (data: { text?: string; attachmentUrl?: string; attachmentType?: string, attachmentName?: string }) => {
     const { text, attachmentUrl, attachmentType, attachmentName } = data;
     if (!currentUser || !chatId || (!text?.trim() && !attachmentUrl)) return;
+
+    // Clear smart replies immediately for better UX
+    setSmartReplies([]);
 
     if (!isFirebaseConfigured) {
         // Handle mock message sending
@@ -156,6 +196,7 @@ export default function ChatConversationPage() {
             attachmentName: attachmentName,
         };
         setMessages(prevMessages => [...prevMessages, newMessage]);
+        scrollToBottom();
         return;
     }
 
@@ -171,7 +212,7 @@ export default function ChatConversationPage() {
         attachmentType: attachmentType || null,
         attachmentName: attachmentName || null,
       });
-      // Smart replies trigger logic removed
+      // Smart replies will be triggered by the useEffect that watches messages
     } catch (error) {
       console.error("Error sending message:", error);
       // Add user feedback for error
@@ -182,9 +223,9 @@ export default function ChatConversationPage() {
     return (
       <div className="flex h-full flex-col p-2 md:p-4">
         <Skeleton className="h-16 w-full mb-4" />
-        <div className="flex-1 space-y-4">
+        <div className="flex-1 space-y-4 p-4">
           <Skeleton className="h-12 w-3/4 self-start rounded-lg" />
-          <Skeleton className="h-12 w-3/4 self-end rounded-lg" />
+          <Skeleton className="h-12 w-3/4 ml-auto self-end rounded-lg" />
           <Skeleton className="h-12 w-2/3 self-start rounded-lg" />
         </div>
         <Skeleton className="h-20 w-full mt-4" />
@@ -198,10 +239,17 @@ export default function ChatConversationPage() {
   }
 
   if (!chatId) {
-    return <div className="flex h-full items-center justify-center p-4 text-center">Please select a chat to start a conversation.</div>;
+    return (
+        <div className="hidden h-full flex-col items-center justify-center bg-muted/50 text-center md:flex">
+            <div className="flex flex-col items-center gap-2">
+                <Info className="h-12 w-12 text-muted-foreground" />
+                <h2 className="text-xl font-semibold">Welcome to RippleChat</h2>
+                <p className="text-muted-foreground">Select a conversation from the sidebar to start chatting.</p>
+            </div>
+        </div>
+    );
   }
   
-  const mockParticipantsForHeader: AppUser[] = currentUser ? [currentUser] : []; 
   const isGroupChat = !chatId.includes('_');
 
   return (
@@ -211,21 +259,20 @@ export default function ChatConversationPage() {
             <Info className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             <AlertTitle className="font-semibold">Offline / Mock Mode</AlertTitle>
             <AlertDescription>
-              The app is running in a mock mode. To enable real-time chat with a persistent backend, please configure your Firebase credentials in 
-              <code className="mx-1 rounded bg-amber-200/50 px-1 py-0.5 text-xs dark:bg-amber-800/50">src/lib/firebase.ts</code>.
+              The app is running in a mock mode. To enable real-time chat with a persistent backend, please configure your Firebase credentials.
             </AlertDescription>
         </Alert>
       )}
       <ChatHeader 
         chatId={chatId} 
         name={chatName} 
-        avatarUrl={isGroupChat ? `https://placehold.co/100x100.png?text=${chatName?.substring(0,1)}` : currentUser?.photoURL}
-        status={isGroupChat ? 'group' : 'online'}
-        participants={mockParticipantsForHeader} 
+        avatarUrl={isGroupChat ? `https://placehold.co/100x100.png?text=${chatName?.substring(0,1)}` : (participants.find(p => p.uid !== currentUser?.uid)?.photoURL)}
+        status={isGroupChat ? `${participants.length} members` : (participants.find(p => p.uid !== currentUser?.uid)?.status || 'offline')}
+        participants={participants} 
         isGroup={isGroupChat}
       />
       <ScrollArea className="flex-1 p-2 md:p-4" ref={scrollAreaRef}>
-        <div className="space-y-4">
+        <div className="space-y-4 pr-2">
           {messages.map((msg) => (
             <ChatMessageItem key={msg.id} message={msg} currentUser={currentUser!} />
           ))}
@@ -236,8 +283,8 @@ export default function ChatConversationPage() {
       </ScrollArea>
       <ChatInput 
         onSendMessage={handleSendMessage} 
-        smartReplies={[]}
-        isLoadingSmartReplies={false}
+        smartReplies={smartReplies}
+        isLoadingSmartReplies={isLoadingSmartReplies}
       />
     </div>
   );

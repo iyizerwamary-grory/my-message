@@ -3,7 +3,6 @@
 
 import type { User as FirebaseUser } from 'firebase/auth'; // Firebase's User type
 import { 
-  getAuth, 
   onAuthStateChanged, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -13,8 +12,8 @@ import {
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { auth, db, app as firebaseApp, isFirebaseConfigured } from '@/lib/firebase'; // Firebase app instance, import app
 import type { User as AppUser, UserStatus } from '@/lib/types'; // Your app's User type
-import { doc, setDoc, getDoc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { getDatabase, ref, onValue, onDisconnect, set } from "firebase/database";
+import { doc, setDoc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { getDatabase, ref, onValue, onDisconnect, set, goOnline, goOffline } from "firebase/database";
 
 interface AuthContextType {
   user: AppUser | null; // Use your AppUser type
@@ -54,19 +53,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return;
     }
 
-    if (firebaseApp && firebaseApp.options && firebaseApp.options.apiKey === "YOUR_API_KEY") {
-      console.error(
-        "CRITICAL FIREBASE CONFIGURATION ERROR: The API key is a placeholder."
-      );
+    if (!firebaseApp) {
+      setLoading(false);
+      return;
     }
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const rtdb = getDatabase(firebaseApp);
+    const authInstance = auth!;
+
+    const unsubscribe = onAuthStateChanged(authInstance, (firebaseUser) => {
       if (firebaseUser) {
-        // Set up Realtime Database presence
-        const rtdb = getDatabase(firebaseApp);
-        const presenceRef = ref(rtdb, `.info/connected`);
+        // --- Realtime Database Presence ---
         const userStatusRef = ref(rtdb, `status/${firebaseUser.uid}`);
+        const presenceRef = ref(rtdb, `.info/connected`);
         
+        goOnline(rtdb);
+
         onValue(presenceRef, (snap) => {
           if (snap.val() === true) {
             set(userStatusRef, 'online');
@@ -74,9 +76,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         });
 
-        // Get user data from Firestore
+        // --- Firestore User Data Sync ---
         const userDocRef = doc(db, "users", firebaseUser.uid);
-        onSnapshot(userDocRef, (userDocSnap) => {
+        const unsubscribeFirestore = onSnapshot(userDocRef, (userDocSnap) => {
           if (userDocSnap.exists()) {
             const firestoreUserData = userDocSnap.data();
              setUser({
@@ -87,23 +89,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 status: firestoreUserData.status || 'offline',
             });
           } else {
-             setUser(mapFirebaseUserToAppUser(firebaseUser));
+             // This case may happen if user is created but firestore doc fails.
+             setUser(mapFirebaseUserToAppUser(firebaseUser, 'offline'));
           }
         });
-        
-        // Also listen for RTDB status changes and update Firestore
-        onValue(userStatusRef, (snap) => {
+
+        // Sync RTDB status to Firestore
+        const unsubscribeRtdb = onValue(userStatusRef, (snap) => {
             const status = snap.val();
              if (status) {
-                updateDoc(userDocRef, { status: status, lastChanged: serverTimestamp() });
+                updateDoc(userDocRef, { status: status, lastChanged: serverTimestamp() }).catch(err => console.log("Failed to update status in firestore", err));
              }
         });
 
+        setLoading(false);
+        // Return a cleanup function for all listeners
+        return () => {
+          unsubscribeFirestore();
+          unsubscribeRtdb();
+          goOffline(rtdb);
+        }
+
       } else {
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
+
     return () => unsubscribe(); 
   }, []);
 
@@ -124,7 +136,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, pass);
+      await signInWithEmailAndPassword(auth!, email, pass);
+      // onAuthStateChanged will handle the rest
     } catch (error) {
       console.error("Login error:", error);
       setLoading(false);
@@ -135,7 +148,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logout = async () => {
     if (user && isFirebaseConfigured) {
         // Set offline in RTDB before signing out
-        const rtdb = getDatabase(firebaseApp);
+        const rtdb = getDatabase(firebaseApp!);
         const userStatusRef = ref(rtdb, `status/${user.uid}`);
         await set(userStatusRef, 'offline');
     }
@@ -148,7 +161,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
     setLoading(true);
     try {
-      await firebaseSignOut(auth);
+      await firebaseSignOut(auth!);
     } catch (error) {
       console.error("Logout error: ", error);
     } finally {
@@ -174,7 +187,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
     setLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      const userCredential = await createUserWithEmailAndPassword(auth!, email, pass);
       const firebaseUser = userCredential.user;
       
       await updateProfile(firebaseUser, { displayName: name });
@@ -186,8 +199,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         displayName: name,
         photoURL: firebaseUser.photoURL || `https://placehold.co/100x100.png?text=${name.substring(0,1)}`,
         createdAt: serverTimestamp(),
-        status: 'offline',
+        status: 'online', // Set initial status to online
       });
+      // onAuthStateChanged will handle the rest
     } catch (error) {
       console.error("Signup error:", error);
       setLoading(false);
