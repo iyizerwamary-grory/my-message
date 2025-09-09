@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { format } from 'date-fns';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Image from 'next/image';
-import { File, Download } from "lucide-react";
+import { File, Download, Music } from "lucide-react";
 import { Button } from "../ui/button";
 
 interface ChatMessageItemProps {
@@ -17,6 +17,7 @@ interface ChatMessageItemProps {
 
 const isImage = (type?: string) => type?.startsWith('image/');
 const isVideo = (type?: string) => type?.startsWith('video/');
+const isAudio = (type?: string) => type?.startsWith('audio/');
 
 const AttachmentPreview = ({ message }: { message: Message }) => {
     if (!message.attachmentUrl) return null;
@@ -27,7 +28,7 @@ const AttachmentPreview = ({ message }: { message: Message }) => {
                 <Image
                     src={message.attachmentUrl}
                     alt={message.attachmentName || "Uploaded image"}
-                    layout="fill"
+                    fill
                     objectFit="cover"
                     onClick={() => window.open(message.attachmentUrl, '_blank')}
                 />
@@ -37,8 +38,21 @@ const AttachmentPreview = ({ message }: { message: Message }) => {
     
     if (isVideo(message.attachmentType)) {
         return (
-            <div className="relative mt-2 w-64 max-w-full overflow-hidden rounded-lg border">
+            <div className="relative mt-2 w-full max-w-xs overflow-hidden rounded-lg border">
                 <video
+                    src={message.attachmentUrl}
+                    controls
+                    className="w-full aspect-video"
+                />
+            </div>
+        )
+    }
+
+    if (isAudio(message.attachmentType)) {
+        return (
+            <div className="mt-2 flex w-64 max-w-full items-center gap-2 rounded-lg border bg-muted/50 p-2">
+                 <Music className="h-7 w-7 text-muted-foreground shrink-0" />
+                <audio
                     src={message.attachmentUrl}
                     controls
                     className="w-full"
@@ -47,20 +61,23 @@ const AttachmentPreview = ({ message }: { message: Message }) => {
         )
     }
 
+
     // Fallback for other file types
     return (
-        <div className="mt-2 flex items-center rounded-lg border bg-muted/50 p-2 max-w-xs">
+        <a 
+          href={message.attachmentUrl} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          download={message.attachmentName}
+          className="mt-2 flex items-center rounded-lg border bg-muted/50 p-2 max-w-xs hover:bg-muted/80 transition-colors"
+        >
             <File className="h-7 w-7 text-muted-foreground mr-2 shrink-0" />
             <div className="flex-1 overflow-hidden">
                 <p className="truncate text-sm font-medium">{message.attachmentName || "Attachment"}</p>
                 <p className="text-xs text-muted-foreground">Click to download</p>
             </div>
-             <a href={message.attachmentUrl} target="_blank" rel="noopener noreferrer" download={message.attachmentName}>
-                <Button variant="ghost" size="icon">
-                    <Download className="h-5 w-5" />
-                </Button>
-            </a>
-        </div>
+             <Download className="h-5 w-5 ml-2 shrink-0" />
+        </a>
     )
 }
 
@@ -94,18 +111,18 @@ export function ChatMessageItem({ message, currentUser }: ChatMessageItemProps) 
             <TooltipTrigger asChild>
               <div
                 className={cn(
-                  "max-w-[70%] rounded-xl px-3 py-2 shadow-md relative",
+                  "max-w-xs sm:max-w-md md:max-w-lg rounded-xl px-3 py-2 shadow-md relative",
                   isOwnMessage
                     ? "bg-primary text-primary-foreground rounded-br-none"
                     : "bg-card text-card-foreground border rounded-bl-none",
                   // No padding if the message is only an attachment with no text
-                  message.attachmentUrl && !message.text && 'p-1'
+                  message.attachmentUrl && !message.text && 'p-1 bg-transparent border-0 shadow-none'
                 )}
               >
-                {!isOwnMessage && (
+                {!isOwnMessage && message.text && (
                    <p className={cn("text-xs font-medium mb-0.5 text-muted-foreground", message.attachmentUrl && !message.text && 'px-2 pt-1' )}>{senderName}</p>
                 )}
-                {message.text && <p className="text-sm whitespace-pre-wrap break-words px-0.5">{message.text}</p>}
+                {message.text && <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>}
                 {message.attachmentUrl && <AttachmentPreview message={message} />}
               </div>
             </TooltipTrigger>
@@ -129,3 +146,5 @@ export function ChatMessageItem({ message, currentUser }: ChatMessageItemProps) 
     </div>
   );
 }
+
+    

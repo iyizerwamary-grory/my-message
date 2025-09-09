@@ -82,11 +82,13 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
 
   const [isRecording, setIsRecording] = useState(false);
   const [micPermission, setMicPermission] = useState<'idle' | 'pending' | 'granted' | 'denied'>('idle');
-  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
   const [showMicPermissionAlert, setShowMicPermissionAlert] = useState(false);
   const [isEmojiPopoverOpen, setIsEmojiPopoverOpen] = useState(false);
 
-  const [uploadingFile, setUploadingFile] = useState<File | null>(null);
+  const [uploadingFile, setUploadingFile] = useState<File | {name: string, type: string} | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadTask, setUploadTask] = useState<UploadTask | null>(null);
 
@@ -113,9 +115,7 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
+  const startUpload = (fileToUpload: File | Blob, fileName: string, fileType: string) => {
       if (!storage) {
         toast({
             title: "Firebase Storage Error",
@@ -125,76 +125,84 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
         return;
       }
       
-      const isImage = file.type.startsWith('image/');
+      const isImage = fileType.startsWith('image/');
       const toastId = toast({
         title: "Preparing upload...",
-        description: isImage ? `Compressing ${file.name}...` : `Preparing ${file.name}...`,
+        description: isImage ? `Compressing ${fileName}...` : `Preparing ${fileName}...`,
       }).id;
 
-      setUploadingFile(file);
+      setUploadingFile({name: fileName, type: fileType});
       setUploadProgress(0);
 
-      try {
-        const fileToUpload = isImage ? await compressImage(file) : file;
-        const storageRef = ref(storage, `chat-attachments/${chatId}/${Date.now()}_${file.name}`);
-        const newUploadTask = uploadBytesResumable(storageRef, fileToUpload);
-        setUploadTask(newUploadTask);
+      const processAndUpload = async () => {
+        try {
+          const fileBlob = isImage && fileToUpload instanceof File ? await compressImage(fileToUpload) : fileToUpload;
+          const storageRef = ref(storage, `chat-attachments/${chatId}/${Date.now()}_${fileName}`);
+          const newUploadTask = uploadBytesResumable(storageRef, fileBlob);
+          setUploadTask(newUploadTask);
 
-        newUploadTask.on('state_changed',
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(progress);
-             toast({
-                id: toastId,
-                title: "Uploading...",
-                description: `Sending ${file.name} - ${Math.round(progress)}%`,
-             });
-          },
-          (error) => {
-            console.error("Upload failed:", error);
-            if (error.code !== 'storage/canceled') {
+          newUploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(progress);
               toast({
-                id: toastId,
-                title: "Upload Failed",
-                description: "Your file could not be uploaded. Please try again.",
-                variant: "destructive"
+                  id: toastId,
+                  title: "Uploading...",
+                  description: `Sending ${fileName} - ${Math.round(progress)}%`,
               });
-            }
-            setUploadingFile(null);
-            setUploadTask(null);
-          },
-          () => {
-            getDownloadURL(newUploadTask.snapshot.ref).then((downloadURL) => {
-              onSendMessage({
-                attachmentUrl: downloadURL,
-                attachmentType: file.type,
-                attachmentName: file.name,
-                text: message // Send any typed text along with the file
-              });
-              toast({
-                id: toastId,
-                title: "File Sent!",
-                description: `${file.name} has been sent.`,
-              });
-              setMessage(""); // Clear message input after sending attachment
+            },
+            (error) => {
+              console.error("Upload failed:", error);
+              if (error.code !== 'storage/canceled') {
+                toast({
+                  id: toastId,
+                  title: "Upload Failed",
+                  description: "Your file could not be uploaded. Please try again.",
+                  variant: "destructive"
+                });
+              }
               setUploadingFile(null);
               setUploadTask(null);
-            });
-          }
-        );
-      } catch (error) {
-        console.error("Image compression or upload failed", error);
-        toast({
-            id: toastId,
-            title: "Upload Failed",
-            description: "There was an error processing your file.",
-            variant: "destructive"
-        });
-        setUploadingFile(null);
-        setUploadTask(null);
+            },
+            () => {
+              getDownloadURL(newUploadTask.snapshot.ref).then((downloadURL) => {
+                onSendMessage({
+                  attachmentUrl: downloadURL,
+                  attachmentType: fileType,
+                  attachmentName: fileName,
+                  text: message // Send any typed text along with the file
+                });
+                toast({
+                  id: toastId,
+                  title: "File Sent!",
+                  description: `${fileName} has been sent.`,
+                });
+                setMessage(""); // Clear message input after sending attachment
+                setUploadingFile(null);
+                setUploadTask(null);
+              });
+            }
+          );
+        } catch (error) {
+          console.error("File processing or upload failed", error);
+          toast({
+              id: toastId,
+              title: "Upload Failed",
+              description: "There was an error processing your file.",
+              variant: "destructive"
+          });
+          setUploadingFile(null);
+          setUploadTask(null);
+        }
       }
+      
+      processAndUpload();
+  }
 
-
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      startUpload(file, file.name, file.type);
       if (fileInputRef.current) {
         fileInputRef.current.value = ""; // Reset file input
       }
@@ -225,15 +233,11 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
   const handleVoiceNoteClick = async () => {
     if (isRecording) {
       // Stop recording
+      mediaRecorderRef.current?.stop();
       setIsRecording(false);
-      if (audioStream) {
-        audioStream.getTracks().forEach(track => track.stop());
-        setAudioStream(null);
-      }
-      onSendMessage({ text: "🎤 Voice Note sent (mocked)" });
       toast({
-        title: "Voice Note",
-        description: "Voice note sent (mocked recording).",
+        title: "Recording Stopped",
+        description: "Processing voice note...",
       });
       setMicPermission('idle');
     } else {
@@ -242,9 +246,23 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
       setMicPermission('pending');
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setAudioStream(stream);
         setMicPermission('granted');
         setIsRecording(true);
+        mediaRecorderRef.current = new MediaRecorder(stream);
+        audioChunksRef.current = [];
+        
+        mediaRecorderRef.current.addEventListener("dataavailable", event => {
+            audioChunksRef.current.push(event.data);
+        });
+
+        mediaRecorderRef.current.addEventListener("stop", () => {
+            const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            const fileName = `voice-note-${new Date().toISOString()}.webm`;
+            startUpload(audioBlob, fileName, 'audio/webm');
+            stream.getTracks().forEach(track => track.stop()); // Stop the stream
+        });
+
+        mediaRecorderRef.current.start();
         toast({
           title: "Recording Started",
           description: "Microphone is active. Click stop to send.",
@@ -260,11 +278,11 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
   // Cleanup audio stream on component unmount
   useEffect(() => {
     return () => {
-      if (audioStream) {
-        audioStream.getTracks().forEach(track => track.stop());
+      if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
+         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [audioStream]);
+  }, []);
 
   const [chatId, setChatId] = useState('');
     useEffect(() => {
@@ -326,7 +344,7 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
           ref={fileInputRef} 
           onChange={handleFileChange} 
           className="hidden" 
-          accept="image/*,video/*"
+          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
           disabled={isRecording || !!uploadingFile}
         />
         
@@ -398,3 +416,5 @@ export function ChatInput({ onSendMessage, smartReplies, isLoadingSmartReplies }
     </div>
   );
 }
+
+    
