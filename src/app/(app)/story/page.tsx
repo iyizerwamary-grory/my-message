@@ -36,13 +36,18 @@ export default function StoryPage() {
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
 
   useEffect(() => {
-    if (!isFirebaseConfigured) {
+    if (authLoading) {
+      // Wait for authentication to complete before trying to fetch stories
+      setIsLoadingStories(true);
+      return;
+    }
+    
+    if (!user || !isFirebaseConfigured) {
       setIsLoadingStories(false);
       return;
     }
 
     const storiesColRef = collection(db, 'stories');
-    // Query stories sorted by timestamp. Filtering will happen on the client.
     const q = query(storiesColRef, orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -54,7 +59,6 @@ export default function StoryPage() {
         const data = doc.data();
         const storyTimestamp = (data.timestamp as Timestamp)?.toMillis() || 0;
 
-        // Filter stories on the client-side to avoid needing a composite index
         if (storyTimestamp > twentyFourHoursAgo) {
             fetchedStories.push({
               id: doc.id,
@@ -64,7 +68,6 @@ export default function StoryPage() {
         }
       });
 
-      // Group stories by user
       const grouped = fetchedStories.reduce((acc, story) => {
         let group = acc.find(g => g.userId === story.userId);
         if (!group) {
@@ -77,7 +80,6 @@ export default function StoryPage() {
           acc.push(group);
         }
         group.stories.push(story);
-        // Sort stories within the group by timestamp (ascending for viewing order)
         group.stories.sort((a, b) => a.timestamp - b.timestamp);
         return acc;
       }, [] as GroupedStory[]);
@@ -87,14 +89,13 @@ export default function StoryPage() {
     }, (error) => {
       console.error("Error fetching stories: ", error);
       setIsLoadingStories(false);
-      // Don't show an error for permission denied, as it could be rule propagation delay
       if (error.code !== 'permission-denied') {
         toast({ title: "Error", description: "Could not fetch stories.", variant: "destructive" });
       }
     });
 
     return () => unsubscribe();
-  }, [toast]);
+  }, [user, authLoading, toast]);
 
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -214,7 +215,7 @@ export default function StoryPage() {
 
       <div>
         <h2 className="text-lg md:text-xl font-semibold mb-4">Recent Stories</h2>
-        {isLoadingStories ? (
+        {isLoadingStories || authLoading ? (
             <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-4">
                 {Array.from({length: 4}).map((_, i) => <Skeleton key={i} className="w-16 h-24 rounded-lg"/>)}
             </div>
@@ -232,6 +233,12 @@ export default function StoryPage() {
               </div>
             ))}
           </div>
+        ) : !isFirebaseConfigured ? (
+           <Card className="flex flex-col items-center justify-center p-8 border-dashed">
+                <AlertTriangle className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Stories are disabled in offline mode.</p>
+                <p className="text-sm text-muted-foreground">Please configure Firebase to use this feature.</p>
+            </Card>
         ) : (
             <Card className="flex flex-col items-center justify-center p-8 border-dashed">
                 <Camera className="h-12 w-12 text-muted-foreground mb-4" />
