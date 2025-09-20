@@ -36,29 +36,34 @@ export default function StoryPage() {
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
 
   useEffect(() => {
-    if (authLoading) {
-      // Wait for authentication to complete before trying to fetch stories
+    if (authLoading || !isFirebaseConfigured) {
       setIsLoadingStories(true);
+      if (!isFirebaseConfigured) {
+        setIsLoadingStories(false);
+      }
       return;
     }
     
-    if (!user || !isFirebaseConfigured) {
+    if (!user) {
+      setStories([]);
       setIsLoadingStories(false);
       return;
     }
 
     const storiesColRef = collection(db, 'stories');
+    // Simplified query: just order by timestamp. Filtering will happen on the client.
     const q = query(storiesColRef, orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const now = new Date();
-      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).getTime();
+      const twentyFourHoursAgo = now.getTime() - 24 * 60 * 60 * 1000;
       
       const fetchedStories: Story[] = [];
       snapshot.forEach(doc => {
         const data = doc.data();
         const storyTimestamp = (data.timestamp as Timestamp)?.toMillis() || 0;
-
+        
+        // Client-side filtering
         if (storyTimestamp > twentyFourHoursAgo) {
             fetchedStories.push({
               id: doc.id,
@@ -233,11 +238,11 @@ export default function StoryPage() {
               </div>
             ))}
           </div>
-        ) : !isFirebaseConfigured ? (
-           <Card className="flex flex-col items-center justify-center p-8 border-dashed">
+        ) : !user && isFirebaseConfigured ? (
+          <Card className="flex flex-col items-center justify-center p-8 border-dashed">
                 <AlertTriangle className="h-12 w-12 text-muted-foreground mb-4" />
-                <p className="text-muted-foreground">Stories are disabled in offline mode.</p>
-                <p className="text-sm text-muted-foreground">Please configure Firebase to use this feature.</p>
+                <p className="text-muted-foreground">Please log in to view stories.</p>
+                <p className="text-sm text-muted-foreground">Stories from other users will appear here.</p>
             </Card>
         ) : (
             <Card className="flex flex-col items-center justify-center p-8 border-dashed">
@@ -299,5 +304,3 @@ export default function StoryPage() {
     </>
   );
 }
-
-    

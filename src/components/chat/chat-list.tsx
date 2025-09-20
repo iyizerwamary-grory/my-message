@@ -17,43 +17,45 @@ import { usePathname } from 'next/navigation';
 import { PresenceIndicator } from './presence-indicator';
 
 export function ChatList() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, loading: authLoading } = useAuth();
   const pathname = usePathname();
   const [searchTerm, setSearchTerm] = useState("");
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isFirebaseConfigured) {
-      setLoading(false);
-      setUsers([{
-          uid: 'mock_user_1',
-          displayName: 'Jane Doe',
-          email: 'jane@example.com',
-          status: 'online'
-      }, {
-          uid: 'mock_user_2',
-          displayName: 'John Smith',
-          email: 'john@example.com',
-          status: 'offline'
-      }]);
+    if (authLoading || !isFirebaseConfigured) {
+      if (!isFirebaseConfigured) {
+        setLoading(false);
+        setUsers([{
+            uid: 'mock_user_1',
+            displayName: 'Jane Doe',
+            email: 'jane@example.com',
+            status: 'online'
+        }, {
+            uid: 'mock_user_2',
+            displayName: 'John Smith',
+            email: 'john@example.com',
+            status: 'offline'
+        }]);
+      }
       return;
     }
     
     if (!currentUser) {
+        setUsers([]);
         setLoading(false);
         return;
     }
 
     const usersColRef = collection(db, 'users');
     // Query all users except the current one.
-    const q = query(usersColRef, where("uid", "!=", currentUser.uid), orderBy('uid', 'asc'), orderBy('displayName', 'asc'));
+    const q = query(usersColRef, where("uid", "!=", currentUser.uid));
 
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const fetchedUsers: User[] = [];
       querySnapshot.forEach((doc) => {
-        // The where clause now handles filtering out the current user
         fetchedUsers.push({
           uid: doc.id,
           ...doc.data()
@@ -67,7 +69,7 @@ export function ChatList() {
     });
 
     return () => unsubscribe();
-  }, [currentUser]);
+  }, [currentUser, authLoading]);
 
   const filteredUsers = users.filter(user =>
     user.displayName?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -96,7 +98,7 @@ export function ChatList() {
         <nav className="flex flex-col gap-1 p-2">
             <h3 className="px-2 pt-2 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Users</h3>
 
-            {loading ? (
+            {(loading || authLoading) ? (
                 Array.from({ length: 4 }).map((_, i) => (
                     <div key={i} className="flex items-center gap-3 rounded-md p-2">
                         <Skeleton className="h-9 w-9 rounded-full" />
