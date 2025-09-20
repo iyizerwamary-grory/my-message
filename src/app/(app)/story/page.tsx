@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { compressImage } from '@/lib/utils';
 
 interface GroupedStory {
   userId: string;
@@ -88,17 +89,12 @@ export default function StoryPage() {
   const [currentStoryIndex, setCurrentStoryIndex] = useState(0);
 
   useEffect(() => {
-    if (authLoading || !isFirebaseConfigured) {
+    if (authLoading || !isFirebaseConfigured || !user) {
       setIsLoadingStories(true);
-      if (!isFirebaseConfigured) {
+      if (!isFirebaseConfigured || !user) {
+        setStories([]);
         setIsLoadingStories(false);
       }
-      return;
-    }
-    
-    if (!user) {
-      setStories([]);
-      setIsLoadingStories(false);
       return;
     }
 
@@ -156,43 +152,62 @@ export default function StoryPage() {
     const file = event.target.files?.[0];
     if (!file || !user) return;
     
-    if (!file.type.startsWith('image/') && !file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
+    const isImage = file.type.startsWith('image/');
+    if (!isImage && !file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
         toast({ title: "Invalid File", description: "Only image, video, or audio files can be uploaded as stories.", variant: "destructive" });
         return;
     }
 
     setUploading(true);
     setUploadProgress(0);
+    
+    const toastId = toast({
+        title: "Preparing upload...",
+        description: isImage ? `Compressing ${file.name}...` : `Preparing ${file.name}...`,
+      }).id;
 
-    const storageRef = ref(storage, `stories/${user.uid}/${Date.now()}_${file.name}`);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    try {
+        const fileToUpload = isImage ? await compressImage(file) : file;
 
-    uploadTask.on('state_changed',
-      (snapshot) => {
-        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        setUploadProgress(progress);
-      },
-      (error) => {
-        console.error("Upload failed:", error);
-        toast({ title: "Upload Failed", description: "Your story could not be uploaded.", variant: "destructive" });
+        const storageRef = ref(storage, `stories/${user.uid}/${Date.now()}_${file.name}`);
+        const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
+
+        uploadTask.on('state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            setUploadProgress(progress);
+             toast({
+              id: toastId,
+              title: "Uploading Story...",
+              description: `Sending ${file.name} - ${Math.round(progress)}%`,
+            });
+          },
+          (error) => {
+            console.error("Upload failed:", error);
+            toast({ id: toastId, title: "Upload Failed", description: "Your story could not be uploaded.", variant: "destructive" });
+            setUploading(false);
+          },
+          async () => {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            
+            await addDoc(collection(db, 'stories'), {
+              userId: user.uid,
+              userDisplayName: user.displayName,
+              userPhotoURL: user.photoURL,
+              mediaUrl: downloadURL,
+              mediaType: file.type,
+              timestamp: serverTimestamp(),
+            });
+
+            toast({ id: toastId, title: "Story Uploaded!", description: "Your story is now live for 24 hours." });
+            setUploading(false);
+          }
+        );
+    } catch (error) {
+        console.error("File processing failed:", error);
+        toast({ id: toastId, title: "Upload Failed", description: "There was an issue processing your file.", variant: "destructive" });
         setUploading(false);
-      },
-      async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        
-        await addDoc(collection(db, 'stories'), {
-          userId: user.uid,
-          userDisplayName: user.displayName,
-          userPhotoURL: user.photoURL,
-          mediaUrl: downloadURL,
-          mediaType: file.type,
-          timestamp: serverTimestamp(),
-        });
-
-        toast({ title: "Story Uploaded!", description: "Your story is now live for 24 hours." });
-        setUploading(false);
-      }
-    );
+    }
   };
   
   const openStoryViewer = (storyGroup: GroupedStory) => {
