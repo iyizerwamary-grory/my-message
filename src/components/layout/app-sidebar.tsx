@@ -10,7 +10,7 @@ import {
   SidebarMenuButton,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Settings, Users, ChevronLeftSquare, GalleryHorizontal } from "lucide-react";
+import { Settings, Users, ChevronLeftSquare, GalleryHorizontal, FolderArchive } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "../ui/button";
@@ -26,6 +26,7 @@ export function AppSidebar() {
   const navItems = [
     { href: "/chat", label: "Chats", icon: MessageSquare, show: true },
     { href: "/story", label: "Story", icon: GalleryHorizontal, show: true },
+    { href: "/files", label: "Files", icon: FolderArchive, show: !!user },
     { href: "/settings", label: "Settings", icon: Settings, show: !!user },
   ];
 
