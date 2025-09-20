@@ -58,6 +58,8 @@ export default function ChatConversationPage() {
     if (!currentUser) {
       if (isFirebaseConfigured) {
         router.replace(`/login?redirect=/chat/${chatId}`);
+      } else {
+        router.replace('/login');
       }
       setIsLoadingMessages(false);
       return;
@@ -65,25 +67,36 @@ export default function ChatConversationPage() {
     
     if (!isFirebaseConfigured) {
         setChatName(chatId.charAt(0).toUpperCase() + chatId.slice(1));
+        if (chatId === 'general') {
+             setMessages([
+                { id: '1', chatId: 'general', senderId: 'jane@example.com', senderName: 'Jane Doe', text: 'Hey, how is everyone?', timestamp: Date.now() - 200000 },
+                { id: '2', chatId: 'general', senderId: currentUser.uid, senderName: currentUser.displayName, text: 'I am doing great, thanks for asking!', timestamp: Date.now() - 100000 },
+            ]);
+        }
         setIsLoadingMessages(false);
         return;
     }
 
     const fetchChatDetails = async () => {
       if (!currentUser) return;
-      
-      const isGroupChat = !chatId.includes('_');
 
-      if (isGroupChat) {
+      const isGeneralChat = chatId === 'general';
+      const isGroupChat = isGeneralChat || !chatId.includes('_');
+
+      if (isGeneralChat) {
+        setChatName('General');
+        // In a real app, you'd fetch group members. For now, we can leave it simple.
+        // setParticipantCount(...) 
+      } else if (isGroupChat) {
          const chatDocRef = doc(db, 'chats', chatId);
          const chatDocSnap = await getDoc(chatDocRef);
          if (chatDocSnap.exists()) {
            const chatData = chatDocSnap.data();
            setChatName(chatData.name || 'Group Chat');
-           setParticipants(chatData.participants || []); // Assuming participants are stored in chat doc
+           setParticipants(chatData.participants || []);
            setParticipantCount(chatData.participantCount || 0);
          } else {
-           setChatName(chatId === 'general' ? 'General' : 'Group Chat');
+           setChatName('Group Chat');
          }
       } else {
         const otherUserId = chatId.split('_').filter(id => id !== currentUser.uid)[0];
@@ -146,6 +159,12 @@ export default function ChatConversationPage() {
   
   const fetchSmartReplies = async () => {
       if (isLoadingSmartReplies || messages.length < 1 || !currentUser) return;
+      
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.senderId === currentUser.uid) {
+        setSmartReplies([]);
+        return;
+      }
 
       setIsLoadingSmartReplies(true);
       try {
@@ -238,8 +257,15 @@ export default function ChatConversationPage() {
     );
   }
   
-  if (!currentUser && !authLoading && isFirebaseConfigured) {
-    return <div className="flex h-full items-center justify-center">Redirecting to login...</div>;
+  if (!currentUser && !authLoading) {
+     return (
+        <div className="flex h-full items-center justify-center">
+            <div className="text-center">
+                <p className="mb-2">You need to be logged in to view chats.</p>
+                <Button onClick={() => router.push(`/login?redirect=/chat/${chatId}`)}>Go to Login</Button>
+            </div>
+        </div>
+    );
   }
 
   if (!chatId) {
@@ -264,7 +290,7 @@ export default function ChatConversationPage() {
             <Info className="h-5 w-5 text-amber-600 dark:text-amber-400" />
             <AlertTitle className="font-semibold">Offline / Mock Mode</AlertTitle>
             <AlertDescription>
-              The app is running in a mock mode. To enable real-time chat with a persistent backend, please configure your Firebase credentials.
+              The app is running in a mock mode. Backend features like real-time chat and file storage are disabled.
             </AlertDescription>
         </Alert>
       )}
@@ -293,7 +319,3 @@ export default function ChatConversationPage() {
     </div>
   );
 }
-
-    
-
-    

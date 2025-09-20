@@ -44,10 +44,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!isFirebaseConfigured) {
         console.warn("Firebase is not configured. Running in mock mode.");
-        const mockUserJson = localStorage.getItem('mockUser');
-        if (mockUserJson) {
-            const parsed = JSON.parse(mockUserJson)
-            setUser({...parsed, status: 'online'});
+        try {
+          const mockUserJson = localStorage.getItem('mockUser');
+          if (mockUserJson) {
+              const parsed = JSON.parse(mockUserJson)
+              setUser({...parsed, status: 'online'});
+          }
+        } catch (e) {
+          console.error("Could not parse mock user from local storage", e);
+          localStorage.removeItem('mockUser');
         }
         setLoading(false);
         return;
