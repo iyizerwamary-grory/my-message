@@ -5,7 +5,7 @@ import { useState, useEffect, ChangeEvent } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Camera, PlusCircle, AlertTriangle, X } from "lucide-react";
+import { Camera, PlusCircle, AlertTriangle, X, Video, Music } from "lucide-react";
 import { useAuth } from '@/contexts/auth-context';
 import { db, storage, isFirebaseConfigured } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp, query, where, onSnapshot, orderBy, Timestamp } from 'firebase/firestore';
@@ -24,6 +24,58 @@ interface GroupedStory {
   userPhotoURL: string | null;
   stories: Story[];
 }
+
+const StoryMediaViewer = ({ story }: { story: Story }) => {
+    const mediaType = story.mediaType || '';
+
+    if (mediaType.startsWith('image/')) {
+        return (
+            <Image
+                src={story.mediaUrl}
+                alt="Story"
+                fill
+                className="object-contain"
+            />
+        );
+    }
+
+    if (mediaType.startsWith('video/')) {
+        return (
+            <video
+                src={story.mediaUrl}
+                controls
+                autoPlay
+                className="w-full h-full object-contain"
+            >
+                Your browser does not support the video tag.
+            </video>
+        );
+    }
+    
+    if (mediaType.startsWith('audio/')) {
+        return (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-muted/50 p-4">
+                <Music className="w-24 h-24 text-primary mb-4" />
+                 <p className="text-foreground font-semibold mb-2">Voice Note</p>
+                <audio
+                    src={story.mediaUrl}
+                    controls
+                    autoPlay
+                    className="w-full max-w-sm"
+                >
+                    Your browser does not support the audio element.
+                </audio>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex items-center justify-center h-full bg-muted">
+            <p className="text-muted-foreground">Unsupported media type</p>
+        </div>
+    );
+};
+
 
 export default function StoryPage() {
   const { user, loading: authLoading } = useAuth();
@@ -51,7 +103,6 @@ export default function StoryPage() {
     }
 
     const storiesColRef = collection(db, 'stories');
-    // Simplified query: just order by timestamp. Filtering will happen on the client.
     const q = query(storiesColRef, orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -63,7 +114,6 @@ export default function StoryPage() {
         const data = doc.data();
         const storyTimestamp = (data.timestamp as Timestamp)?.toMillis() || 0;
         
-        // Client-side filtering
         if (storyTimestamp > twentyFourHoursAgo) {
             fetchedStories.push({
               id: doc.id,
@@ -105,8 +155,9 @@ export default function StoryPage() {
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
-    if (!file.type.startsWith('image/')) {
-        toast({ title: "Invalid File", description: "Only image files can be uploaded as stories.", variant: "destructive" });
+    
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/') && !file.type.startsWith('audio/')) {
+        toast({ title: "Invalid File", description: "Only image, video, or audio files can be uploaded as stories.", variant: "destructive" });
         return;
     }
 
@@ -158,7 +209,7 @@ export default function StoryPage() {
         if (currentStoryIndex < selectedStoryGroup.stories.length - 1) {
             setCurrentStoryIndex(prev => prev + 1);
         } else {
-            closeStoryViewer(); // Close if it's the last story
+            closeStoryViewer();
         }
     }
   }
@@ -186,14 +237,14 @@ export default function StoryPage() {
               Add Story
            </label>
         </Button>
-         <Input type="file" className="hidden" id="story-upload" onChange={handleFileChange} accept="image/*" disabled={uploading || authLoading || !user} />
+         <Input type="file" className="hidden" id="story-upload" onChange={handleFileChange} accept="image/*,video/*,audio/*" disabled={uploading || authLoading || !user} />
       </div>
 
        {uploading && (
         <Card className="mb-8 border-primary/50">
           <CardHeader>
             <CardTitle>Uploading Your Story...</CardTitle>
-            <CardDescription>Please wait while we process your image.</CardDescription>
+            <CardDescription>Please wait while we process your file.</CardDescription>
           </CardHeader>
           <CardContent>
             <Progress value={uploadProgress} className="w-full" />
@@ -275,18 +326,20 @@ export default function StoryPage() {
                              <AvatarFallback>{selectedStoryGroup.userDisplayName?.substring(0,1) || 'U'}</AvatarFallback>
                         </Avatar>
                         <div>
-                            <DialogTitle className="text-white text-sm font-semibold">{selectedStoryGroup.userDisplayName}</DialogTitle>
-                             <p className="text-xs text-neutral-300">{new Date(selectedStoryGroup.stories[currentStoryIndex].timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                            <div className="flex items-center gap-2">
+                                <DialogTitle className="text-white text-sm font-semibold">{selectedStoryGroup.userDisplayName}</DialogTitle>
+                                <p className="text-xs text-neutral-300">{new Date(selectedStoryGroup.stories[currentStoryIndex].timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                            </div>
+                            {selectedStoryGroup.stories[currentStoryIndex].mediaType?.startsWith('video') && <Video className="h-3 w-3 text-white/80 inline-block mr-1" />}
+                            {selectedStoryGroup.stories[currentStoryIndex].mediaType?.startsWith('audio') && <Music className="h-3 w-3 text-white/80 inline-block mr-1" />}
+                            <span className="text-xs text-white/80 capitalize">
+                                {selectedStoryGroup.stories[currentStoryIndex].mediaType?.split('/')[0] ?? 'Story'}
+                            </span>
                         </div>
                     </div>
                 </DialogHeader>
                 <div className="relative w-full h-full">
-                  <Image 
-                      src={selectedStoryGroup.stories[currentStoryIndex].mediaUrl}
-                      alt="Story"
-                      fill
-                      objectFit="contain"
-                  />
+                  <StoryMediaViewer story={selectedStoryGroup.stories[currentStoryIndex]} />
                 </div>
                  <div className="absolute inset-0 flex justify-between items-center z-10">
                     <button onClick={goToPreviousStory} className="h-full w-1/3" aria-label="Previous Story" />
@@ -304,3 +357,5 @@ export default function StoryPage() {
     </>
   );
 }
+
+    
