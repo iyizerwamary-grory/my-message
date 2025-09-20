@@ -23,6 +23,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Info } from 'lucide-react';
 import { generateSmartReplies } from '@/ai/flows/smart-replies';
 
@@ -319,3 +320,5 @@ export default function ChatConversationPage() {
     </div>
   );
 }
+
+    
