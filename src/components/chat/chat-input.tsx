@@ -10,7 +10,7 @@ import { Skeleton } from "../ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
+import { cn, compressImage } from "@/lib/utils";
 import { storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL, UploadTask } from "firebase/storage";
 import { Progress } from "../ui/progress";
@@ -23,54 +23,6 @@ interface ChatInputProps {
 }
 
 const emojis = ["😀", "😂", "😍", "🤔", "👍", "🎉", "❤️", "🙏"];
-
-const compressImage = (file: File, maxWidth: number = 1280): Promise<Blob> => {
-  return new Promise((resolve, reject) => {
-    const isImage = file.type.startsWith('image/');
-    if (!isImage) {
-      resolve(file);
-      return;
-    }
-
-    const img = document.createElement('img');
-    const canvas = document.createElement('canvas');
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      if (typeof e.target?.result === 'string') {
-        img.src = e.target.result;
-      }
-    };
-
-    img.onload = () => {
-      let { width, height } = img;
-      if (width > maxWidth) {
-        height = (maxWidth / width) * height;
-        width = maxWidth;
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('Could not get canvas context'));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, width, height);
-      
-      canvas.toBlob((blob) => {
-        if (blob) {
-          resolve(blob);
-        } else {
-          reject(new Error('Canvas to Blob conversion failed'));
-        }
-      }, file.type, 0.9);
-    };
-
-    img.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-};
 
 
 export function ChatInput({ chatId, onSendMessage, smartReplies, isLoadingSmartReplies }: ChatInputProps) {
