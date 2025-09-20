@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import { db, isFirebaseConfigured } from '@/lib/firebase';
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, where } from 'firebase/firestore';
 import type { User, UserStatus } from '@/lib/types';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "../ui/input";
@@ -46,17 +46,18 @@ export function ChatList() {
     }
 
     const usersColRef = collection(db, 'users');
-    const q = query(usersColRef, orderBy('displayName', 'asc'));
+    // Query all users except the current one.
+    const q = query(usersColRef, where("uid", "!=", currentUser.uid), orderBy('uid', 'asc'), orderBy('displayName', 'asc'));
+
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       const fetchedUsers: User[] = [];
       querySnapshot.forEach((doc) => {
-        if (doc.id !== currentUser.uid) {
-           fetchedUsers.push({
-            uid: doc.id,
-            ...doc.data()
-          } as User);
-        }
+        // The where clause now handles filtering out the current user
+        fetchedUsers.push({
+          uid: doc.id,
+          ...doc.data()
+        } as User);
       });
       setUsers(fetchedUsers);
       setLoading(false);
