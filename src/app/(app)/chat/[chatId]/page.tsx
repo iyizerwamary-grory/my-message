@@ -34,10 +34,11 @@ export default function ChatConversationPage() {
 
   const [messages, setMessages] = useState<AppMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(true);
-  const [chatName, setChatName] = useState(chatId);
+  const [chatName, setChatName] = useState('');
   const [smartReplies, setSmartReplies] = useState<string[]>([]);
   const [isLoadingSmartReplies, setIsLoadingSmartReplies] = useState(false);
   const [participants, setParticipants] = useState<AppUser[]>([]);
+  const [participantCount, setParticipantCount] = useState(0);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -52,18 +53,15 @@ export default function ChatConversationPage() {
   }
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !chatId) return;
 
     if (!currentUser) {
       if (isFirebaseConfigured) {
         router.replace(`/login?redirect=/chat/${chatId}`);
       }
+      setIsLoadingMessages(false);
+      return;
     }
-
-    if (!chatId) {
-        setIsLoadingMessages(false);
-        return;
-    };
     
     if (!isFirebaseConfigured) {
         setChatName(chatId.charAt(0).toUpperCase() + chatId.slice(1));
@@ -79,11 +77,13 @@ export default function ChatConversationPage() {
       if (isGroupChat) {
          const chatDocRef = doc(db, 'chats', chatId);
          const chatDocSnap = await getDoc(chatDocRef);
-         if (chatDocSnap.exists() && chatDocSnap.data().name) {
-           setChatName(chatDocSnap.data().name);
-           setParticipants([]);
+         if (chatDocSnap.exists()) {
+           const chatData = chatDocSnap.data();
+           setChatName(chatData.name || 'Group Chat');
+           setParticipants(chatData.participants || []); // Assuming participants are stored in chat doc
+           setParticipantCount(chatData.participantCount || 0);
          } else {
-           setChatName(chatId.charAt(0).toUpperCase() + chatId.slice(1));
+           setChatName(chatId === 'general' ? 'General' : 'Group Chat');
          }
       } else {
         const otherUserId = chatId.split('_').filter(id => id !== currentUser.uid)[0];
@@ -94,6 +94,11 @@ export default function ChatConversationPage() {
             const otherUserData = userDocSnap.data() as AppUser;
             setChatName(otherUserData.displayName || 'Chat User');
             setParticipants([currentUser, otherUserData]);
+            setParticipantCount(2);
+          } else {
+             setChatName('Chat User');
+             setParticipants([currentUser]);
+             setParticipantCount(1);
           }
         }
       }
@@ -225,7 +230,7 @@ export default function ChatConversationPage() {
         <Skeleton className="h-16 w-full mb-4" />
         <div className="flex-1 space-y-4 p-4">
           <Skeleton className="h-12 w-3/4 self-start rounded-lg" />
-          <Skeleton className="h-12 w-3  /4 ml-auto self-end rounded-lg" />
+          <Skeleton className="h-12 w-3/4 ml-auto self-end rounded-lg" />
           <Skeleton className="h-12 w-2/3 self-start rounded-lg" />
         </div>
         <Skeleton className="h-20 w-full mt-4" />
@@ -250,6 +255,7 @@ export default function ChatConversationPage() {
   }
   
   const isGroupChat = !chatId.includes('_');
+  const otherUser = isGroupChat ? null : participants.find(p => p.uid !== currentUser?.uid);
 
   return (
     <div className="flex h-full max-h-[calc(100vh-theme(spacing.16))] flex-col bg-background">
@@ -265,8 +271,8 @@ export default function ChatConversationPage() {
       <ChatHeader 
         chatId={chatId} 
         name={chatName} 
-        avatarUrl={isGroupChat ? `https://placehold.co/100x100.png?text=${chatName?.substring(0,1)}` : (participants.find(p => p.uid !== currentUser?.uid)?.photoURL)}
-        status={isGroupChat ? `${participantCount} members` : (participants.find(p => p.uid !== currentUser?.uid)?.status || 'offline')}
+        avatarUrl={isGroupChat ? `https://placehold.co/100x100.png?text=${chatName?.substring(0,1)}` : otherUser?.photoURL}
+        status={isGroupChat ? `${participantCount} members` : (otherUser?.status || 'offline')}
         participants={participants} 
         isGroup={isGroupChat}
       />
@@ -287,5 +293,7 @@ export default function ChatConversationPage() {
     </div>
   );
 }
+
+    
 
     
