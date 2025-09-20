@@ -41,22 +41,27 @@ export default function StoryPage() {
       return;
     }
 
-    const now = new Date();
-    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const storiesColRef = collection(db, 'stories');
-    
-    // Query for stories created in the last 24 hours
-    const q = query(storiesColRef, where('timestamp', '>', Timestamp.fromDate(twentyFourHoursAgo)), orderBy('timestamp', 'desc'));
+    // Query stories sorted by timestamp. Filtering will happen on the client.
+    const q = query(storiesColRef, orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
+      const now = new Date();
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).getTime();
+      
       const fetchedStories: Story[] = [];
       snapshot.forEach(doc => {
         const data = doc.data();
-        fetchedStories.push({
-          id: doc.id,
-          ...data,
-          timestamp: (data.timestamp as Timestamp)?.toMillis() || Date.now()
-        } as Story);
+        const storyTimestamp = (data.timestamp as Timestamp)?.toMillis() || 0;
+
+        // Filter stories on the client-side to avoid needing a composite index
+        if (storyTimestamp > twentyFourHoursAgo) {
+            fetchedStories.push({
+              id: doc.id,
+              ...data,
+              timestamp: storyTimestamp
+            } as Story);
+        }
       });
 
       // Group stories by user
@@ -72,7 +77,7 @@ export default function StoryPage() {
           acc.push(group);
         }
         group.stories.push(story);
-        // Sort stories within the group by timestamp
+        // Sort stories within the group by timestamp (ascending for viewing order)
         group.stories.sort((a, b) => a.timestamp - b.timestamp);
         return acc;
       }, [] as GroupedStory[]);
@@ -82,7 +87,10 @@ export default function StoryPage() {
     }, (error) => {
       console.error("Error fetching stories: ", error);
       setIsLoadingStories(false);
-      toast({ title: "Error", description: "Could not fetch stories.", variant: "destructive" });
+      // Don't show an error for permission denied, as it could be rule propagation delay
+      if (error.code !== 'permission-denied') {
+        toast({ title: "Error", description: "Could not fetch stories.", variant: "destructive" });
+      }
     });
 
     return () => unsubscribe();
@@ -284,3 +292,5 @@ export default function StoryPage() {
     </>
   );
 }
+
+    
