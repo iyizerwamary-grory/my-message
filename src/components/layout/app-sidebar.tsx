@@ -23,10 +23,12 @@ export function AppSidebar() {
   const { toggleSidebar } = useSidebar();
   const { user } = useAuth(); // Get current user state
 
+  const adminEmail = "jeandedieuishimwe109@gmail.com";
+
   const navItems = [
     { href: "/chat", label: "Chats", icon: MessageSquare, show: true },
     { href: "/story", label: "Story", icon: GalleryHorizontal, show: true },
-    { href: "/files", label: "Files", icon: FolderArchive, show: !!user },
+    { href: "/files", label: "Files", icon: FolderArchive, show: !!user && user.email === adminEmail },
     { href: "/settings", label: "Settings", icon: Settings, show: !!user },
   ];
 

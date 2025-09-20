@@ -9,9 +9,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, FolderOpen } from 'lucide-react';
+import { AlertTriangle, FolderOpen, ShieldAlert } from 'lucide-react';
 import { FileCard, FileDetails } from './_components/file-card';
 import { useRouter } from 'next/navigation';
+import { Alert, AlertTitle } from '@/components/ui/alert';
 
 export default function FilesPage() {
     const { user, loading: authLoading } = useAuth();
@@ -21,10 +22,18 @@ export default function FilesPage() {
     const [files, setFiles] = useState<FileDetails[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
+    const adminEmail = "jeandedieuishimwe109@gmail.com";
+    const isAuthorized = user?.email === adminEmail;
+
     useEffect(() => {
         if (authLoading) return;
         if (!user) {
             router.replace('/login?redirect=/files');
+            return;
+        }
+
+        if (!isAuthorized) {
+            setIsLoading(false);
             return;
         }
 
@@ -87,7 +96,7 @@ export default function FilesPage() {
         };
 
         fetchFiles();
-    }, [user, authLoading, toast, router]);
+    }, [user, authLoading, toast, router, isAuthorized]);
 
     const storyFiles = useMemo(() => files.filter(f => f.path.startsWith('stories/')), [files]);
     const chatFiles = useMemo(() => files.filter(f => f.path.startsWith('chat-attachments/')), [files]);
@@ -121,6 +130,18 @@ export default function FilesPage() {
         );
     }
     
+    if (!isAuthorized) {
+        return (
+             <div className="container mx-auto max-w-4xl py-6 px-4">
+                <Alert variant="destructive" className="flex flex-col items-center text-center p-8">
+                    <ShieldAlert className="h-12 w-12 mb-4" />
+                    <AlertTitle className="text-xl font-bold">Access Denied</AlertTitle>
+                    <CardDescription>You do not have permission to view this page.</CardDescription>
+                </Alert>
+            </div>
+        )
+    }
+
     if (!isFirebaseConfigured) {
         return (
             <div className="container mx-auto max-w-7xl py-6 px-4">
