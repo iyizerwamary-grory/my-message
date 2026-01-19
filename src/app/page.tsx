@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { MessageSquare, Users, ShieldCheck } from 'lucide-react';
+import Image from 'next/image';
 
 const LandingHeader = () => (
     <header className="sticky top-0 z-50 flex h-16 items-center justify-between border-b bg-card px-4 shadow-sm sm:px-6">
@@ -56,13 +57,13 @@ export default function LandingPage() {
                   </Button>
                 </div>
               </div>
-              <img
-                src="https://placehold.co/600x400/64B5F6/FFFFFF/png?text=RippleChat"
+              <Image
+                src="https://picsum.photos/seed/technology/600/400"
                 width="600"
                 height="400"
-                alt="Hero"
+                alt="Abstract image representing communication technology"
                 className="mx-auto aspect-video overflow-hidden rounded-xl object-cover sm:w-full lg:order-last lg:aspect-square"
-                data-ai-hint="app screenshot"
+                data-ai-hint="communication technology"
               />
             </div>
           </div>

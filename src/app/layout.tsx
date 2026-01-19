@@ -15,10 +15,43 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+const siteUrl = 'https://www.your-domain.com'; // Placeholder - CHANGE THIS
+
 export const metadata: Metadata = {
-  title: 'RippleChat',
-  description: 'Seamless communication, always connected.',
+  title: {
+    default: 'RippleChat | Seamless Communication, Always Connected',
+    template: '%s | RippleChat',
+  },
+  description: 'RippleChat is a modern, real-time chat application designed for fast, secure, and engaging conversations. Share messages, images, and ephemeral stories instantly. Built with Next.js and Firebase.',
+  keywords: ['chat', 'real-time', 'messaging', 'stories', 'firebase', 'nextjs', 'communication'],
+  authors: [{ name: 'RippleChat' }],
+  creator: 'Firebase Studio',
+  metadataBase: new URL(siteUrl),
+
+  openGraph: {
+    title: 'RippleChat | Seamless Communication, Always Connected',
+    description: 'Join the conversation on RippleChat, a modern platform for real-time messaging and story sharing.',
+    url: siteUrl,
+    siteName: 'RippleChat',
+    images: [
+      {
+        url: 'https://placehold.co/1200x630/64B5F6/FFFFFF/png?text=RippleChat',
+        width: 1200,
+        height: 630,
+        alt: 'RippleChat Logo'
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'RippleChat | Seamless Communication, Always Connected',
+    description: 'Join the conversation on RippleChat, a modern platform for real-time messaging and story sharing.',
+    images: ['https://placehold.co/1200x630/64B5F6/FFFFFF/png?text=RippleChat'],
+  },
 };
+
 
 export default function RootLayout({
   children,
