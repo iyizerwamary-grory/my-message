@@ -1,13 +1,11 @@
-# See https://www.robotstxt.org/robotstxt.html for documentation on how to use the robots.txt file
-
+# See https://www.robotstxt.org/robotstxt.html for syntax and directives
 User-agent: *
 Allow: /
-Disallow: /chat
-Disallow: /story
-Disallow: /files
-Disallow: /settings
-Disallow: /admin
-Disallow: /login
-Disallow: /signup
+Disallow: /admin/
+Disallow: /chat/
+Disallow: /files/
+Disallow: /settings/
+Disallow: /story/
 
-Sitemap: https://ripplechat-mtir3.web.app/sitemap.xml
+# Point to the sitemap
+Sitemap: https://www.your-domain.com/sitemap.xml
