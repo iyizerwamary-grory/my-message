@@ -29,6 +29,7 @@ export function AppSidebar() {
     { href: "/chat", label: "Chats", icon: MessageSquare, show: true },
     { href: "/story", label: "Story", icon: GalleryHorizontal, show: true },
     { href: "/files", label: "Files", icon: FolderArchive, show: !!user && user.email === adminEmail },
+    { href: "/admin", label: "Admin", icon: Users, show: !!user && user.email === adminEmail },
     { href: "/settings", label: "Settings", icon: Settings, show: !!user },
   ];
 
