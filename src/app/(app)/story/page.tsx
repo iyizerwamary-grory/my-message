@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, ChangeEvent } from 'react';
@@ -99,24 +98,18 @@ export default function StoryPage() {
     }
 
     const storiesColRef = collection(db, 'stories');
-    const q = query(storiesColRef, orderBy('timestamp', 'desc'));
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const q = query(storiesColRef, where("timestamp", ">", twentyFourHoursAgo), orderBy('timestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const now = new Date();
-      const twentyFourHoursAgo = now.getTime() - 24 * 60 * 60 * 1000;
-      
       const fetchedStories: Story[] = [];
       snapshot.forEach(doc => {
         const data = doc.data();
-        const storyTimestamp = (data.timestamp as Timestamp)?.toMillis() || 0;
-        
-        if (storyTimestamp > twentyFourHoursAgo) {
-            fetchedStories.push({
-              id: doc.id,
-              ...data,
-              timestamp: storyTimestamp
-            } as Story);
-        }
+        fetchedStories.push({
+          id: doc.id,
+          ...data,
+          timestamp: (data.timestamp as Timestamp)?.toMillis() || 0
+        } as Story);
       });
 
       const grouped = fetchedStories.reduce((acc, story) => {
@@ -372,5 +365,3 @@ export default function StoryPage() {
     </>
   );
 }
-
-    
